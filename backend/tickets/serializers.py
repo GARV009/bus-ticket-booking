@@ -16,3 +16,9 @@ class HoldRequestSerializer(serializers.Serializer):
     trip_id = serializers.IntegerField()
     seat_ids = serializers.ListField(child=serializers.IntegerField())
     client_id = serializers.CharField()
+
+class PurchaseRequestSerializer(serializers.Serializer):
+    trip_id = serializers.IntegerField()
+    seat_ids = serializers.ListField(child=serializers.IntegerField())
+    hold_token = serializers.CharField()
+    buyer_email = serializers.EmailField()

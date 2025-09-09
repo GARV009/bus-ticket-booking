@@ -17,6 +17,8 @@ from .redis_utils import set_hold
 
 HOLD_TTL = int(os.environ.get("HOLD_TTL_SECONDS", 120))  # 2 min default
 
+from .models import Seat
+
 class HoldSeatsView(APIView):
     def post(self, request):
         serializer = HoldRequestSerializer(data=request.data)
@@ -30,6 +32,17 @@ class HoldSeatsView(APIView):
         success, failed = [], []
 
         for sid in seat_ids:
+            # Check DB: seat must exist and not be sold
+            try:
+                seat = Seat.objects.get(id=sid, trip_id=trip_id)
+                if seat.is_sold:
+                    failed.append(sid)
+                    continue
+            except Seat.DoesNotExist:
+                failed.append(sid)
+                continue
+            
+            # Try to set hold in Redis
             was_set = set_hold(trip_id, sid, hold_token, client_id, HOLD_TTL)
             if was_set:
                 success.append(sid)
@@ -41,7 +54,7 @@ class HoldSeatsView(APIView):
         if success:
             async_to_sync(channel_layer.group_send)(
                 f"trip_{trip_id}",
-                {"type":"seat_event", "event":"seat_held", "seat_ids": success}
+                {"type": "seat_event", "event": "seat_held", "seat_ids": success}
             )
 
         return Response({
@@ -49,4 +62,35 @@ class HoldSeatsView(APIView):
             "held": success,
             "failed": failed,
             "ttl": HOLD_TTL
+        }, status=status.HTTP_200_OK)
+
+
+from .serializers import PurchaseRequestSerializer
+from .purchase import try_purchase
+
+class PurchaseView(APIView):
+    def post(self, request):
+        serializer = PurchaseRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        trip_id = serializer.validated_data["trip_id"]
+        seat_ids = serializer.validated_data["seat_ids"]
+        hold_token = serializer.validated_data["hold_token"]
+        buyer_email = serializer.validated_data["buyer_email"]
+
+        try:
+            booking = try_purchase(trip_id, seat_ids, hold_token, buyer_email)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Notify via WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"trip_{trip_id}",
+            {"type":"seat_event","event":"seat_sold","seat_ids":seat_ids}
+        )
+
+        return Response({
+            "booking_id": booking.id,
+            "status": "success"
         }, status=status.HTTP_200_OK)
