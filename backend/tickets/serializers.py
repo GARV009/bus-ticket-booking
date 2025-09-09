@@ -11,3 +11,8 @@ class TripSerializer(serializers.ModelSerializer):
     class Meta:
         model = Trip
         fields = ('id','title','origin','destination','depart_at','arrive_at','seats')
+
+class HoldRequestSerializer(serializers.Serializer):
+    trip_id = serializers.IntegerField()
+    seat_ids = serializers.ListField(child=serializers.IntegerField())
+    client_id = serializers.CharField()
