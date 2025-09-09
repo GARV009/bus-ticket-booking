@@ -1,0 +1,11 @@
+Django>=4.2
+djangorestframework
+channels
+channels-redis
+daphne
+redis
+psycopg2-binary
+dj-database-url
+python-dotenv
+reportlab
+django-anymail
