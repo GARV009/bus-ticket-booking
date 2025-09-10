@@ -94,3 +94,21 @@ class PurchaseView(APIView):
             "booking_id": booking.id,
             "status": "success"
         }, status=status.HTTP_200_OK)
+
+class TripDetailView(APIView):
+    def get(self, request, trip_id):
+        try:
+            trip = Trip.objects.get(id=trip_id)
+        except Trip.DoesNotExist:
+            return Response({"error": "Trip not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        seats = trip.seats.all().values("id", "seat_label", "row", "column", "price", "is_sold")
+        return Response({
+            "id": trip.id,
+            "title": trip.title,
+            "origin": trip.origin,
+            "destination": trip.destination,
+            "depart_at": trip.depart_at,
+            "arrive_at": trip.arrive_at,
+            "seats": list(seats),
+        })
