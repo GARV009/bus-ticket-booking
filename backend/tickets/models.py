@@ -11,10 +11,13 @@ class Trip(models.Model):
         return f"{self.title} ({self.origin} → {self.destination})"
 
 class Seat(models.Model):
-    trip = models.ForeignKey(Trip, related_name='seats', on_delete=models.CASCADE)
+    trip = models.ForeignKey(Trip, related_name="seats", on_delete=models.CASCADE)
     seat_label = models.CharField(max_length=16)
+    row = models.IntegerField(default=1)
+    column = models.CharField(max_length=2, default="A")
     price = models.DecimalField(max_digits=9, decimal_places=2, default=0)
     is_sold = models.BooleanField(default=False)
+
 
 class Booking(models.Model):
     trip = models.ForeignKey(Trip, on_delete=models.CASCADE)
