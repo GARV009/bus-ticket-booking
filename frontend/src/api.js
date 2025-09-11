@@ -1,4 +1,4 @@
-const API_BASE = "/api"; // vite proxy will forward to backend
+const API_BASE = window.location.origin + "/api";
 
 export async function fetchTrips() {
   const r = await fetch(`${API_BASE}/trips/`);
