@@ -10,3 +10,4 @@ python-dotenv
 reportlab
 django-anymail
 djangorestframework-simplejwt
+whitenoise==6.7.0
