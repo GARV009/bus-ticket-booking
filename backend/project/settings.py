@@ -105,6 +105,11 @@ TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
+# Add this line to point Django to your React build files
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, 'frontend_dist'),  # This should be where your built React files are
+]
+
 # --- Static Files ---
 STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"  # ✅ Use "staticfiles" as is common with WhiteNoise
