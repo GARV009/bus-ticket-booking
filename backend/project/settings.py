@@ -1,19 +1,21 @@
 import os
-import dj_database_url
 from pathlib import Path
+
+import dj_database_url
 from dotenv import load_dotenv
-load_dotenv()  # loads .env
+
+load_dotenv()  # Load variables from .env
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret-key")
+# --- Security & Debug ---
+SECRET_KEY = os.environ.get("SECRET_KEY", "dev-secret")
 DEBUG = os.environ.get("DEBUG", "1") == "1"
 ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", "localhost,127.0.0.1").split(",")
 
-# Application definition
-
+# --- Installed Apps ---
 INSTALLED_APPS = [
-    "daphne",                # for ASGI
+    "daphne",  # for ASGI
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -24,44 +26,56 @@ INSTALLED_APPS = [
     "rest_framework",
     "channels",
     "tickets",
+
+    # ✅ Whitenoise (patched)
+    "whitenoise.runserver_nostatic",
 ]
 
+# --- Middleware ---
 MIDDLEWARE = [
-    'django.middleware.security.SecurityMiddleware',
-    'django.contrib.sessions.middleware.SessionMiddleware',
-    'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
-    'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # ✅ Whitenoise middleware must be just after SecurityMiddleware
+    "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
+    
+    "django.contrib.sessions.middleware.SessionMiddleware",
+    "django.middleware.common.CommonMiddleware",
+    "django.middleware.csrf.CsrfViewMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
+    "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
+# --- URL / Templates ---
 ROOT_URLCONF = 'project.urls'
 
 TEMPLATES = [
     {
-        'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
-        'APP_DIRS': True,
-        'OPTIONS': {
-            'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
             ],
         },
     },
 ]
 
+# --- WSGI/ASGI ---
 WSGI_APPLICATION = 'project.wsgi.application'
+ASGI_APPLICATION = "project.asgi.application"
 
-
+# --- Database (Supabase via env var) ---
 DATABASES = {
-    "default": dj_database_url.parse(os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}"))
+    "default": dj_database_url.config(
+        default=os.environ.get("DATABASE_URL", f"sqlite:///{BASE_DIR / 'db.sqlite3'}")
+    )
 }
 
-# Password validation
-# https://docs.djangoproject.com/en/5.2/ref/settings/#auth-password-validators
+# --- Auth ---
+AUTH_USER_MODEL = "tickets.User"
 
 AUTH_PASSWORD_VALIDATORS = [
     {
@@ -78,33 +92,35 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
+# --- DRF JWT Auth ---
+REST_FRAMEWORK = {
+    "DEFAULT_AUTHENTICATION_CLASSES": (
+        "rest_framework_simplejwt.authentication.JWTAuthentication",
+    ),
+}
 
-# Internationalization
-# https://docs.djangoproject.com/en/5.2/topics/i18n/
-
+# --- Internationalization ---
 LANGUAGE_CODE = 'en-us'
-
 TIME_ZONE = 'UTC'
-
 USE_I18N = True
-
 USE_TZ = True
 
-
+# --- Static Files ---
 STATIC_URL = "/static/"
-STATIC_ROOT = BASE_DIR / "static"
+STATIC_ROOT = BASE_DIR / "staticfiles"  # ✅ Use "staticfiles" as is common with WhiteNoise
 
+# WhiteNoise settings (optional for compression, caching)
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-# Default primary key field type
-# https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
-
+# --- Default Primary Key ---
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# Channels
-ASGI_APPLICATION = "project.asgi.application"
+# --- Channels with Redis (Upstash support) ---
 CHANNEL_LAYERS = {
     "default": {
         "BACKEND": "channels_redis.core.RedisChannelLayer",
-        "CONFIG": {"hosts": [os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")]},
-    },
+        "CONFIG": {
+            "hosts": [os.environ.get("REDIS_URL", "redis://127.0.0.1:6379/0")]
+        },
+    }
 }

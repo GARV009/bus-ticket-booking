@@ -1,10 +1,11 @@
 from rest_framework import generics
-from .models import Trip
+from .models import Trip, Seat
 from .serializers import TripSerializer
 
 class TripListView(generics.ListCreateAPIView):
     queryset = Trip.objects.all()
     serializer_class = TripSerializer
+
 import os
 import uuid
 from rest_framework.views import APIView
@@ -12,12 +13,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from .serializers import HoldRequestSerializer
+from .serializers import HoldRequestSerializer, ReleaseRequestSerializer
 from .redis_utils import set_hold
 
-HOLD_TTL = int(os.environ.get("HOLD_TTL_SECONDS", 120))  # 2 min default
-
-from .models import Seat
+HOLD_TTL = int(os.environ.get("HOLD_TTL_SECONDS", 20))  # 2 min default
 
 class HoldSeatsView(APIView):
     def post(self, request):
@@ -41,7 +40,7 @@ class HoldSeatsView(APIView):
             except Seat.DoesNotExist:
                 failed.append(sid)
                 continue
-            
+
             # Try to set hold in Redis
             was_set = set_hold(trip_id, sid, hold_token, client_id, HOLD_TTL)
             if was_set:
@@ -49,12 +48,12 @@ class HoldSeatsView(APIView):
             else:
                 failed.append(sid)
 
-        # Notify via WebSocket
-        channel_layer = get_channel_layer()
+        # ✅ Notify via WebSocket (use "status" instead of "event")
         if success:
+            channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
                 f"trip_{trip_id}",
-                {"type": "seat_event", "event": "seat_held", "seat_ids": success}
+                {"type": "seat_event", "event": "held", "seat_ids": success}
             )
 
         return Response({
@@ -83,17 +82,18 @@ class PurchaseView(APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Notify via WebSocket
+        # ✅ Notify via WebSocket (sold status)
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
             f"trip_{trip_id}",
-            {"type":"seat_event","event":"seat_sold","seat_ids":seat_ids}
+            {"type": "seat_event", "event": "sold", "seat_ids": seat_ids}
         )
 
         return Response({
             "booking_id": booking.id,
             "status": "success"
         }, status=status.HTTP_200_OK)
+
 
 class TripDetailView(APIView):
     def get(self, request, trip_id):
@@ -102,7 +102,9 @@ class TripDetailView(APIView):
         except Trip.DoesNotExist:
             return Response({"error": "Trip not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        seats = trip.seats.all().values("id", "seat_label", "row", "column", "price", "is_sold")
+        seats = trip.seats.all().values(
+            "id", "seat_label", "row", "column", "price", "is_sold"
+        )
         return Response({
             "id": trip.id,
             "title": trip.title,
@@ -112,3 +114,43 @@ class TripDetailView(APIView):
             "arrive_at": trip.arrive_at,
             "seats": list(seats),
         })
+
+
+from rest_framework.permissions import IsAuthenticated
+from .permissions import IsOrganizer
+from .serializers import TripCreateSerializer
+
+class TripCreateView(APIView):
+    permission_classes = [IsAuthenticated, IsOrganizer]
+
+    def post(self, request):
+        serializer = TripCreateSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        trip = serializer.save()
+        return Response({"id": trip.id, "title": trip.title}, status=status.HTTP_201_CREATED)
+
+from .redis_utils import release_hold
+class ReleaseSeatsView(APIView):
+    def post(self, request):
+        serializer = ReleaseRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+
+        trip_id = serializer.validated_data["trip_id"]
+        seat_ids = serializer.validated_data["seat_ids"]
+        hold_token = serializer.validated_data["hold_token"]
+
+        released = []
+        for sid in seat_ids:
+            if release_hold(trip_id, sid, hold_token):  # only release if token matches
+                released.append(sid)
+
+        if released:
+            # notify all users via websocket
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"trip_{trip_id}",
+                {"type": "seat_event", "event": "released", "seat_ids": released}
+            )
+
+        return Response({"released": released}, status=status.HTTP_200_OK)

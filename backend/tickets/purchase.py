@@ -44,6 +44,6 @@ def try_purchase(trip_id:int, seat_ids:list, hold_token:str, buyer_email:str=Non
 
         # Release holds
         for seat in seats:
-            release_hold(trip_id, seat.id)
+            release_hold(trip_id, seat.id, hold_token)
 
         return booking

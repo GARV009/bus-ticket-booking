@@ -1,14 +1,25 @@
 from django.db import models
+from django.contrib.auth.models import AbstractUser
+from django.conf import settings
 
 class Trip(models.Model):
     title = models.CharField(max_length=200)
     origin = models.CharField(max_length=100)
     destination = models.CharField(max_length=100)
-    depart_at = models.DateTimeField(null=True, blank=True)
-    arrive_at = models.DateTimeField(null=True, blank=True)
+    depart_at = models.DateTimeField()
+    arrive_at = models.DateTimeField()
+    bus_type = models.CharField(max_length=50, default="Standard")
+    booking_opens_at = models.DateTimeField(null=True, blank=True)
+    booking_closes_at = models.DateTimeField(null=True, blank=True)
+
+    organizer = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="trips"
+    )
 
     def __str__(self):
-        return f"{self.title} ({self.origin} → {self.destination})"
+        return f"{self.title} ({self.origin} -> {self.destination})"
 
 class Seat(models.Model):
     trip = models.ForeignKey(Trip, related_name="seats", on_delete=models.CASCADE)
@@ -28,3 +39,13 @@ class Booking(models.Model):
 
     def __str__(self):
         return f"Booking #{self.id} trip={self.trip_id}"
+
+class User(AbstractUser):
+    ROLE_CHOICES = (
+        ("organizer", "Organizer"),
+        ("passenger", "Passenger"),
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES, default="passenger")
+
+    def __str__(self):
+        return f"{self.username} ({self.role})"
